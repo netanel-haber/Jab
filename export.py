@@ -2,9 +2,11 @@
 # requires-python = ">=3.12,<3.14"
 # dependencies = ["torch>=2.6,<2.9", "transformers>=5.17,<6", "onnx", "onnxruntime>=1.23"]
 # ///
-"""Export a train.py run to one int2 ONNX file for the browser:   uv run export.py OUT_DIR model.onnx
+"""Export a train.py run to one int2 ONNX file for the browser:   uv run export.py OUT_DIR model/model.onnx
 Inputs: Qwen token ids (the 16k vocabulary is inside; any other token reads as pad), the index of <decide>, the index of each option's </opt>. Output: one score per option.
-Matmuls are int2, the embedding int4, the small head stays full precision (it is a Gemm, which the quantizer leaves alone)."""
+Matmuls are int2, the embedding int4, the small head stays full precision (it is a Gemm, which the quantizer leaves alone).
+The model is derived from Qwen/Qwen3-0.6B-Base (Apache-2.0, Qwen team, Alibaba Cloud): layers removed, vocabulary cut to 16k tokens, fine-tuned, quantized.
+lib/ holds third-party runtimes under their own licenses (onnxruntime-web, MIT; Transformers.js, Apache-2.0)."""
 import json, sys, torch
 from onnxruntime.quantization.matmul_nbits_quantizer import MatMulNBitsQuantizer
 from transformers import AutoModel, AutoTokenizer
