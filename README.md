@@ -1,4 +1,14 @@
-# tab-at-home
+# tab-at-home 
+
+As in:
+
+-----------
+
+> **Mom can we have `tab`?**
+
+> We have `tab` at home.
+
+-----------
 
 Hold Q and press Tab: a small int2 model in your browser focuses the control the page most likely wants next.
 
