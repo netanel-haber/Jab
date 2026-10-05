@@ -106,7 +106,7 @@ remap = remap.cpu()
 backbone = model.forward
 
 def scores(ids, decide, opts):
-    h = head(backbone(input_ids=remap[ids], use_cache=False).last_hidden_state[0])
+    h = head(backbone(input_ids=remap[ids], attention_mask=torch.ones_like(ids), use_cache=False).last_hidden_state[0])   # (a given mask keeps transformers from tracing an op ONNX lacks)
     return h[opts, HEAD_DIM:] @ h[decide, :HEAD_DIM] / HEAD_DIM**0.5
 
 model.forward = scores
