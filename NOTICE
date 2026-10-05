@@ -1,0 +1,9 @@
+tab-at-home
+
+The code in this repository (train.py, export.py and the browser extension) is licensed under the Apache License 2.0, see LICENSE.
+
+model/model.onnx is derived from Qwen/Qwen3-0.6B-Base (Apache License 2.0, Qwen team, Alibaba Cloud): layers removed, the vocabulary
+cut to 16,000 tokens, fine-tuned on a private dataset with a pointer head, and quantized to int2/int4. The files in lib/ are
+third-party runtimes (onnxruntime-web, MIT; Transformers.js, Apache-2.0) under their own licenses.
+
+The training dataset (short text snippets from public web pages) is not included in this repository.
