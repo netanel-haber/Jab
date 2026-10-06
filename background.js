@@ -6,8 +6,10 @@ const INSTR = 'The user is about to press Tab. Which control does this page want
 async function load(ort, { PreTrainedTokenizer }, base) {   // base: the extension's URL, or any URL the files are served from
   ort.env.wasm.wasmPaths = `${base}lib/`;
   ort.env.wasm.numThreads = Math.min(8, Math.max(1, navigator.hardwareConcurrency - 2));   // ONNX Runtime's default is 4; more cores, faster, up to 8
-  const tokenizer = new PreTrainedTokenizer(await (await fetch(`${base}tokenizer.json`)).json(), {});
-  const session = await ort.InferenceSession.create(`${base}model.onnx`, { executionProviders: ['wasm'] });
+  const [tokenizer, session] = await Promise.all([   // in parallel; the graph is already clean, so light optimization halves the session's load time at the same speed
+    fetch(`${base}tokenizer.json`).then((r) => r.json()).then((json) => new PreTrainedTokenizer(json, {})),
+    ort.InferenceSession.create(`${base}model.onnx`, { executionProviders: ['wasm'], graphOptimizationLevel: 'basic' }),
+  ]);
   const [S, Q, O, C, D] = DELIMITERS.map((t) => tokenizer.convert_tokens_to_ids(t));
   const tokens = (text) => tokenizer.encode(text.toWellFormed().replace(/<\|([A-Za-z0-9_]+)\|>/g, '<¦$1¦>'), { add_special_tokens: false });   // page text can never forge a delimiter
   const int64 = (a, dims) => new ort.Tensor('int64', BigInt64Array.from(a, BigInt), dims);
@@ -25,10 +27,15 @@ async function load(ort, { PreTrainedTokenizer }, base) {   // base: the extensi
 }
 
 if (self.document) {
-  let idle; const score = Promise.all([import('./lib/ort.wasm.min.mjs'), import('./lib/transformers.min.js')]).then(([ort, tf]) => load(ort, tf, chrome.runtime.getURL('')));
-  chrome.runtime.onMessage.addListener(({ state, options }, _, send) => {
-    if (!options) return; clearTimeout(idle);
-    score.then((run) => run(state, options)).then(send).finally(() => (idle = setTimeout(() => chrome.runtime.sendMessage({ close: 1 }), 6e5)));
+  let idle;
+  const rest = () => { clearTimeout(idle); idle = setTimeout(() => chrome.runtime.sendMessage({ close: 1 }), 6e5); };   // closes after 10 idle minutes; a page opening or a press counts as use
+  const score = Promise.all([import('./lib/ort.wasm.min.mjs'), import('./lib/transformers.min.js')]).then(([ort, tf]) => load(ort, tf, chrome.runtime.getURL('')));   // starts loading as soon as this page exists
+  rest();
+  chrome.runtime.onMessage.addListener(({ ensure, state, options }, _, send) => {
+    if (ensure) rest();
+    if (!options) return;
+    clearTimeout(idle);
+    score.then((run) => run(state, options)).then(send).finally(rest);
     return true;
   });
 } else chrome.runtime.onMessage.addListener((m, _, send) => {
