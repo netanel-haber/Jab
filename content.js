@@ -59,12 +59,12 @@ const overlay = (() => {
   const root = host.attachShadow({ mode: 'closed' });
   const sheet = new CSSStyleSheet();   // a constructed stylesheet: not blocked by a page's content-security policy, unlike an inline <style>
   sheet.replaceSync(`
-    .badge { position: fixed; width: 18px; height: 18px; border-radius: 9px; background: #2563eb; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
-    .badge.now { background: #1d4ed8; outline: 2px solid #fff; }
-    .note { position: fixed; right: 16px; bottom: 56px; max-width: 280px; padding: 6px 10px; border-radius: 6px; background: #1e3a8a; color: #fff; font: 12px/1.4 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
-    .spinner { position: fixed; right: 16px; bottom: 16px; width: 28px; height: 28px; font: 700 15px/28px system-ui, sans-serif; text-align: center; color: #2563eb; opacity: 0; transition: opacity .2s; }
+    .badge { position: fixed; width: 18px; height: 18px; border-radius: 9px; background: #2b8f58; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+    .badge.now { background: #1e6e42; outline: 2px solid #fff; }
+    .note { position: fixed; right: 16px; bottom: 56px; max-width: 280px; padding: 6px 10px; border-radius: 6px; background: #1f4f35; color: #fff; font: 12px/1.4 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
+    .spinner { position: fixed; right: 16px; bottom: 16px; width: 28px; height: 28px; font: 700 15px/28px system-ui, sans-serif; text-align: center; color: #2b8f58; opacity: 0; transition: opacity .2s; }
     .spinner.on { opacity: .8; }
-    .spinner::before { content: ''; position: absolute; inset: 0; box-sizing: border-box; border: 2px solid rgba(37, 99, 235, .2); border-top-color: #2563eb; border-radius: 50%; animation: turn .9s linear infinite; }
+    .spinner::before { content: ''; position: absolute; inset: 0; box-sizing: border-box; border: 2px solid rgba(43, 143, 88, .22); border-top-color: #2b8f58; border-radius: 50%; animation: turn .9s linear infinite; }
     @keyframes turn { to { transform: rotate(360deg); } }`);
   root.adoptedStyleSheets = [sheet];
   const spinner = document.createElement('div');
