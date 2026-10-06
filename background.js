@@ -5,6 +5,7 @@ const INSTR = 'The user is about to press Tab. Which control does this page want
 
 async function load(ort, { PreTrainedTokenizer }, base) {   // base: the extension's URL, or any URL the files are served from
   ort.env.wasm.wasmPaths = `${base}lib/`;
+  ort.env.wasm.numThreads = Math.min(8, Math.max(1, navigator.hardwareConcurrency - 2));   // ONNX Runtime's default is 4; more cores, faster, up to 8
   const tokenizer = new PreTrainedTokenizer(await (await fetch(`${base}tokenizer.json`)).json(), {});
   const session = await ort.InferenceSession.create(`${base}model.onnx`, { executionProviders: ['wasm'] });
   const [S, Q, O, C, D] = DELIMITERS.map((t) => tokenizer.convert_tokens_to_ids(t));

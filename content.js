@@ -44,7 +44,7 @@ window.__tab = (() => {
   return { collect, describe, state, focusIndex, ring };
 })();
 // Press Ctrl+Q: focus where this page most likely wants you next (again for the one after). Ctrl+Q types nothing and Chrome does not use it; every other key is untouched.
-const LEVEL = 2, K = 5;   // description detail (1 = ~x tokens per control, 2 = ~1.7x, 3 = ~3x), candidates per question
+const LEVEL = 1, K = 5;   // description detail (1 = ~x tokens per control, 2 = ~1.7x, 3 = ~3x; level 1 is as accurate and about twice as fast), candidates per question
 const weight = (c) => (/^(input|textarea|select)/.test(c.kind) ? 3 : c.kind.startsWith('button') ? 2 : 1) + (c.box?.kind == 'main') + 2 * c.view - (c.skip ? 5 : 0) - c.i / 100;   // fields, buttons, links; main area first
 let ses;   // ses = {els: our top 3 picks, n: index of the current one}; it lasts until focus leaves our picks
 addEventListener('focusout', (e) => ses && !ses.els.includes(e.relatedTarget) && (ses = null), true);   // focus left our picks (click elsewhere, window blur, ...): session over
