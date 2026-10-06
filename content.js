@@ -61,6 +61,7 @@ const overlay = (() => {
   sheet.replaceSync(`
     .badge { position: fixed; width: 18px; height: 18px; border-radius: 9px; background: #2563eb; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
     .badge.now { background: #1d4ed8; outline: 2px solid #fff; }
+    .note { position: fixed; right: 16px; bottom: 56px; max-width: 280px; padding: 6px 10px; border-radius: 6px; background: #1e3a8a; color: #fff; font: 12px/1.4 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
     .spinner { position: fixed; right: 16px; bottom: 16px; width: 28px; height: 28px; font: 700 15px/28px system-ui, sans-serif; text-align: center; color: #2563eb; opacity: 0; transition: opacity .2s; }
     .spinner.on { opacity: .8; }
     .spinner::before { content: ''; position: absolute; inset: 0; box-sizing: border-box; border: 2px solid rgba(37, 99, 235, .2); border-top-color: #2563eb; border-radius: 50%; animation: turn .9s linear infinite; }
@@ -95,6 +96,13 @@ const overlay = (() => {
       place();
     },
     hide() { badges.forEach((badge) => badge.remove()); badges = []; host.dataset.badges = 0; },
+    note(text) {   // a short message, so a failure is never silent
+      document.documentElement.append(host);
+      const note = Object.assign(document.createElement('div'), { className: 'note', textContent: text });
+      root.append(note);
+      host.dataset.note = text;
+      setTimeout(() => note.remove(), 4000);
+    },
     spin(on) {   // appears only if the work takes more than a blink
       clearTimeout(delay);
       if (on) delay = setTimeout(() => { document.documentElement.append(host); spinner.classList.add('on'); host.dataset.spinning = 1; }, 120);
@@ -104,7 +112,8 @@ const overlay = (() => {
 })();
 addEventListener('focusout', (e) => { if (ses && !ses.els.includes(e.relatedTarget)) { ses = null; overlay.hide(); } }, true);   // focus left our picks (click elsewhere, window blur, ...): session over
 addEventListener('keydown', async (e) => {
-  if (!alive() || e.code != 'KeyQ' || !e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;   // (a dead copy leaves Ctrl+Q alone)
+  if (e.code != 'KeyQ' || !e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+  if (!alive()) return overlay.note('Jab was reloaded: refresh this page to use it.');   // a stale copy of this script says so, and leaves Ctrl+Q alone
   e.preventDefault(); e.stopPropagation();
   if (e.repeat) return;   // holding the keys down is one press
   if (ses) { ses.n = (ses.els.indexOf(document.activeElement) + 1) % ses.els.length; return ses.els[ses.n].focus(); }   // inside a session: walk the stored picks, no recompute
@@ -117,6 +126,8 @@ addEventListener('keydown', async (e) => {
     ses = { els: top };
     overlay.show();
     top[0].focus();   // the first press lands on the best pick
+  } catch (error) {
+    overlay.note(`Jab could not answer: ${error.message}`);
   } finally {
     overlay.spin(false);
   }
