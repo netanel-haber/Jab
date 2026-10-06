@@ -1,0 +1,7 @@
+# private or generated, never committed
+records.jsonl.gz
+pipeline/
+tools/
+out/
+node_modules/
+__pycache__/
