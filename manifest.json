@@ -1,6 +1,6 @@
 {
  "manifest_version": 3,
- "name": "tab-at-home",
+ "name": "Jab",
  "version": "0.2.0",
  "permissions": [
   "offscreen"
@@ -27,5 +27,5 @@
  "cross_origin_opener_policy": {
   "value": "same-origin"
  },
- "description": "Hold Q and press Tab: focus the control this page most likely wants next. A small model runs in your browser."
+ "description": "Jev-style tab, not affiliated with Jev. Hold Q and press Tab: focus the control this page most likely wants next. A small model runs in your browser."
 }

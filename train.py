@@ -2,7 +2,7 @@
 # requires-python = ">=3.12,<3.14"
 # dependencies = ["torch>=2.6,<2.9", "transformers>=5.17,<6", "numpy", "onnx", "onnx-ir", "onnxruntime>=1.23"]
 # ///
-"""Tab at home, which control should Tab reach next?   uv run train.py PRETRAINED OUT DATA.jsonl.gz
+"""Jab, which control should Tab reach next?   uv run train.py PRETRAINED OUT DATA.jsonl.gz
 Cuts a Qwen3 model (PRETRAINED: Hugging Face name or path, e.g. Qwen/Qwen3-0.6B-Base) to 8 of its 28 layers and 16k of its 151k tokens, trains it with a pointer head for 1,400 steps
 (10 minutes on an RTX 3500 Ada; the last 40% with int2 weights in the forward pass), and exports OUT/model.onnx for the browser. Rerun the same command to resume. DATA is not included:
 one JSON object per line, {"split": "train"|"eval", "cohort", "cand", "ok": [option indexes the labeller accepts], "rec": {"state": page text, "questions": [{"instr", "options": [control descriptions], "label": index}]}}.
