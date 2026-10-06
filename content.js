@@ -43,18 +43,15 @@ window.__tab = (() => {
   const ring = () => { const s = getComputedStyle(document.activeElement); return (s.outlineStyle != 'none' && parseFloat(s.outlineWidth) > 0) || s.boxShadow != 'none'; };
   return { collect, describe, state, focusIndex, ring };
 })();
-// Hold Q and press Tab: focus where this page most likely wants you next (again for the one after). Plain Tab and plain Q are untouched.
+// Press Ctrl+Q: focus where this page most likely wants you next (again for the one after). Ctrl+Q types nothing and Chrome does not use it; every other key is untouched.
 const LEVEL = 2, K = 5;   // description detail (1 = ~x tokens per control, 2 = ~1.7x, 3 = ~3x), candidates per question
 const weight = (c) => (/^(input|textarea|select)/.test(c.kind) ? 3 : c.kind.startsWith('button') ? 2 : 1) + (c.box?.kind == 'main') + 2 * c.view - (c.skip ? 5 : 0) - c.i / 100;   // fields, buttons, links; main area first
-let q, ses, typed = 0;   // ses = {els: our top 3 picks, n: index of the current one}; it lasts until focus leaves our picks. typed: the q's the held Q key put into a field
-addEventListener('input', (e) => q && /^q$/i.test(e.data) && typed++, true);   // counted when they really landed, so they can be taken back if it was the chord
-addEventListener('keyup', (e) => e.code == 'KeyQ' && (q = typed = 0), true);
+let ses;   // ses = {els: our top 3 picks, n: index of the current one}; it lasts until focus leaves our picks
 addEventListener('focusout', (e) => ses && !ses.els.includes(e.relatedTarget) && (ses = null), true);   // focus left our picks (click elsewhere, window blur, ...): session over
 addEventListener('keydown', async (e) => {
-  if (e.code == 'KeyQ') q = 1;
-  if (!q || e.code != 'Tab') return;
+  if (e.code != 'KeyQ' || !e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
   e.preventDefault(); e.stopPropagation();
-  for (; typed > 0; typed--) document.execCommand('delete');   // Q+Tab was the chord: take back the q's typed while holding Q
+  if (e.repeat) return;   // holding the keys down is one press
   if (ses) { ses.n = (ses.els.indexOf(document.activeElement) + 1) % ses.els.length; return ses.els[ses.n].focus(); }   // inside a session: walk the stored picks, no recompute
   const all = __tab.collect(), at = __tab.focusIndex(), others = all.filter((c) => c.i != at).sort((a, b) => weight(b) - weight(a)).slice(0, K - (at >= 0)), cands = at >= 0 ? [...others, all[at]] : others;
   await chrome.runtime.sendMessage({ ensure: 1 });

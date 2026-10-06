@@ -27,5 +27,5 @@
  "cross_origin_opener_policy": {
   "value": "same-origin"
  },
- "description": "Jev-style tab, not affiliated with Jev. Hold Q and press Tab: focus the control this page most likely wants next. A small model runs in your browser."
+ "description": "Jev-style tab, not affiliated with Jev. Press Ctrl+Q: focus the control this page most likely wants next. A small model runs in your browser."
 }
