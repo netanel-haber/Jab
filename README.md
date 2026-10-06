@@ -1,4 +1,4 @@
-# Jab
+# jab
 
 Jev-style tab, not affiliated with Jev.
 
