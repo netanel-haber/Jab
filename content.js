@@ -51,15 +51,73 @@ const warm = () => alive() && document.visibilityState == 'visible' && chrome.ru
 warm();
 addEventListener('visibilitychange', warm);
 let ses;   // ses = {els: our top 3 picks, n: index of the current one}; it lasts until focus leaves our picks
-addEventListener('focusout', (e) => ses && !ses.els.includes(e.relatedTarget) && (ses = null), true);   // focus left our picks (click elsewhere, window blur, ...): session over
+// The overlay: numbered badges beside the three picks, and a small spinning J while the model works. It lives in a closed shadow root, so the page's own CSS and scripts cannot reach it.
+const overlay = (() => {
+  const host = document.createElement('div');
+  host.id = 'jab-overlay';
+  host.style.cssText = 'all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;';
+  const root = host.attachShadow({ mode: 'closed' });
+  const sheet = new CSSStyleSheet();   // a constructed stylesheet: not blocked by a page's content-security policy, unlike an inline <style>
+  sheet.replaceSync(`
+    .badge { position: fixed; width: 18px; height: 18px; border-radius: 9px; background: #2563eb; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+    .badge.now { background: #1d4ed8; outline: 2px solid #fff; }
+    .spinner { position: fixed; right: 16px; bottom: 16px; width: 28px; height: 28px; font: 700 15px/28px system-ui, sans-serif; text-align: center; color: #2563eb; opacity: 0; transition: opacity .2s; }
+    .spinner.on { opacity: .8; }
+    .spinner::before { content: ''; position: absolute; inset: 0; box-sizing: border-box; border: 2px solid rgba(37, 99, 235, .2); border-top-color: #2563eb; border-radius: 50%; animation: turn .9s linear infinite; }
+    @keyframes turn { to { transform: rotate(360deg); } }`);
+  root.adoptedStyleSheets = [sheet];
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  spinner.textContent = 'J';
+  root.append(spinner);
+  let badges = [], delay;
+
+  const place = () => {   // each badge sits on the top-left corner of its control, and the one that has focus is drawn stronger
+    if (!ses) return;
+    badges.forEach((badge, i) => {
+      const r = ses.els[i].getBoundingClientRect();
+      badge.style.display = r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth ? '' : 'none';
+      badge.style.left = `${Math.max(2, r.left - 8)}px`;
+      badge.style.top = `${Math.max(2, r.top - 8)}px`;
+      badge.classList.toggle('now', ses.els[i] == document.activeElement);
+    });
+  };
+  for (const event of ['scroll', 'resize', 'focusin']) addEventListener(event, place, { capture: true, passive: true });
+  setInterval(place, 300);   // catches layout shifts that fire no event
+
+  return {
+    show() {
+      document.documentElement.append(host);
+      badges.forEach((badge) => badge.remove());
+      badges = ses.els.map((_, i) => Object.assign(document.createElement('div'), { className: 'badge', textContent: i + 1 }));
+      root.append(...badges);
+      host.dataset.badges = badges.length;
+      place();
+    },
+    hide() { badges.forEach((badge) => badge.remove()); badges = []; host.dataset.badges = 0; },
+    spin(on) {   // appears only if the work takes more than a blink
+      clearTimeout(delay);
+      if (on) delay = setTimeout(() => { document.documentElement.append(host); spinner.classList.add('on'); host.dataset.spinning = 1; }, 120);
+      else { spinner.classList.remove('on'); host.dataset.spinning = 0; }
+    },
+  };
+})();
+addEventListener('focusout', (e) => { if (ses && !ses.els.includes(e.relatedTarget)) { ses = null; overlay.hide(); } }, true);   // focus left our picks (click elsewhere, window blur, ...): session over
 addEventListener('keydown', async (e) => {
   if (!alive() || e.code != 'KeyQ' || !e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;   // (a dead copy leaves Ctrl+Q alone)
   e.preventDefault(); e.stopPropagation();
   if (e.repeat) return;   // holding the keys down is one press
   if (ses) { ses.n = (ses.els.indexOf(document.activeElement) + 1) % ses.els.length; return ses.els[ses.n].focus(); }   // inside a session: walk the stored picks, no recompute
-  const all = __tab.collect(), at = __tab.focusIndex(), others = all.filter((c) => c.i != at).sort((a, b) => weight(b) - weight(a)).slice(0, K - (at >= 0)), cands = at >= 0 ? [...others, all[at]] : others;
-  await chrome.runtime.sendMessage({ ensure: 1 });
-  const p = await chrome.runtime.sendMessage({ state: __tab.state(LEVEL, all[at]), options: cands.map((c) => __tab.describe(c, LEVEL) + (c.i == at ? ' (focused)' : '')) });
-  const top = p.map((v, k) => [cands[k].i == at ? -1 : v, cands[k].i]).sort((a, b) => b[0] - a[0]).slice(0, 3).map((x) => __tabEls[x[1]]);
-  ses = { els: top }; top[0].focus();
+  overlay.spin(true);
+  try {
+    const all = __tab.collect(), at = __tab.focusIndex(), others = all.filter((c) => c.i != at).sort((a, b) => weight(b) - weight(a)).slice(0, K - (at >= 0)), cands = at >= 0 ? [...others, all[at]] : others;
+    await chrome.runtime.sendMessage({ ensure: 1 });
+    const p = await chrome.runtime.sendMessage({ state: __tab.state(LEVEL, all[at]), options: cands.map((c) => __tab.describe(c, LEVEL) + (c.i == at ? ' (focused)' : '')) });
+    const top = p.map((v, k) => [cands[k].i == at ? -1 : v, cands[k].i]).sort((a, b) => b[0] - a[0]).slice(0, 3).map((x) => __tabEls[x[1]]);
+    ses = { els: top };
+    overlay.show();
+    top[0].focus();   // the first press lands on the best pick
+  } finally {
+    overlay.spin(false);
+  }
 }, true);
