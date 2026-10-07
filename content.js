@@ -1,6 +1,5 @@
-// Page side of the tab student: find the focusable controls and describe each at three context levels.
-// Level 1 is the baseline (~x tokens per control, incl. whether it is on screen), level 2 adds attributes and viewport geometry (~2x), level 3 adds the text
-// around the control (~3x). Used by collect.mjs for training data and, unchanged, by the extension at inference.
+// Page side: find the focusable controls and describe each at three context levels. Level 1 is the baseline (~x tokens per control, incl. whether it is on screen),
+// level 2 adds attributes and viewport geometry (~2x), level 3 adds the text around the control (~3x). The model was trained on text made by this same code.
 window.__tab = (() => {
   const SEL = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[contenteditable=""],[contenteditable=true],[tabindex]:not([tabindex="-1"]),[role=button],[role=link],[role=textbox],[role=combobox],[role=searchbox],[role=checkbox],[role=tab],[role=menuitem]';
   const BOX = 'form,dialog,[role=dialog],[role=search],nav,header,footer,aside,main,section,fieldset,[role=banner],[role=navigation],[role=contentinfo]';
@@ -113,7 +112,7 @@ const overlay = (() => {
 addEventListener('focusout', (e) => { if (ses && !ses.els.includes(e.relatedTarget)) { ses = null; overlay.hide(); } }, true);   // focus left our picks (click elsewhere, window blur, ...): session over
 addEventListener('keydown', async (e) => {
   if (e.code != 'KeyQ' || !e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-  if (!alive()) return overlay.note('Jab was reloaded: refresh this page to use it.');   // a stale copy of this script says so, and leaves Ctrl+Q alone
+  if (!alive()) return overlay.note('jab was reloaded: refresh this page to use it.');   // a stale copy of this script says so, and leaves Ctrl+Q alone
   e.preventDefault(); e.stopPropagation();
   if (e.repeat) return;   // holding the keys down is one press
   if (ses) { ses.n = (ses.els.indexOf(document.activeElement) + 1) % ses.els.length; return ses.els[ses.n].focus(); }   // inside a session: walk the stored picks, no recompute
@@ -127,7 +126,7 @@ addEventListener('keydown', async (e) => {
     overlay.show();
     top[0].focus();   // the first press lands on the best pick
   } catch (error) {
-    overlay.note(`Jab could not answer: ${error.message}`);
+    overlay.note(`jab could not answer: ${error.message}`);
   } finally {
     overlay.spin(false);
   }
