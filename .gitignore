@@ -1,8 +1,0 @@
-# private or generated, never committed
-steps.jsonl.gz
-records.jsonl.gz
-pipeline/
-tools/
-out/
-node_modules/
-__pycache__/

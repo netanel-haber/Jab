@@ -16,7 +16,7 @@ Press Ctrl+Q: jab focuses the control the page most likely wants next, and marks
 
 ## How it works
 
-`content.js` lists the page's focusable controls (up to 80) with plain facts about each: kind, label, where it is and how big, whether it is on screen, its flags, the words in its label and link. `background.js` scores them with `rank.js`, which runs the LightGBM trees in `ranker.json` (400 trees, 0.5 MB). It takes about 0.1 s per press, runs on the CPU, caches nothing, and sends nothing anywhere.
+`content.js` lists the page's focusable controls (up to 80) with plain facts about each: kind, label, where it is and how big, whether it is on screen, its flags, the words in its label and link. `background.js` scores them, running the LightGBM trees in `ranker.json` (400 trees, 0.5 MB). It takes about 0.1 s per press, runs on the CPU, caches nothing, and sends nothing anywhere.
 
 ## Accuracy
 

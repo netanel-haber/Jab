@@ -3,7 +3,7 @@
 # dependencies = ["numpy", "lightgbm", "scikit-learn"]
 # ///
 """jab, which control should Tab reach next?   uv run train.py DATA.jsonl.gz ranker.json [--all]
-Trains a LightGBM ranker (LambdaRank) that scores every control of a page, and writes the trees as ranker.json for rank.js to run in the browser.
+Trains a LightGBM ranker (LambdaRank) that scores every control of a page, and writes the trees as ranker.json for background.js to run in the browser.
 DATA is not included: one JSON object per line, one per labelled step: {"split": "train"|"eval", "controls": [what content.js collect() returns for the page, up to 80],
 "focus": index of the focused control or -1, "target": index of the control a person would want next, "picks": all the controls the labeller picked}.
 Prints top-1 / top-3 on the "eval" pages. --all also trains on them, for the file you ship."""
