@@ -11,7 +11,7 @@ if (self.document) {
   const label = (e) => e.getAttribute('aria-label') || text(e.labels?.[0]) || text(document.getElementById(e.getAttribute('aria-labelledby'))) || e.placeholder || e.title
     || (e.matches('input[type=submit],input[type=button]') ? e.value : text(e)) || e.getAttribute('alt') || e.querySelector('img')?.alt || e.name || '';
   const q = (v) => Math.floor(Math.round(v) / 10 + 0.5) * 10;   // viewport pixels, to the nearest 10
-  let els = [], ses;   // els: the controls last listed; ses = our top 3 picks, which lasts until focus leaves them
+  let els = [], ses;   // els: the controls last listed; ses = our top 5 picks, which lasts until focus leaves them
 
   const collect = () => {   // up to 80 focusable, visible controls, each described by the facts train.py's features use
     els = [...document.querySelectorAll(SEL)].filter(alive).slice(0, 80);
@@ -23,7 +23,7 @@ if (self.document) {
     });
   };
 
-  // The overlay: numbered badges beside the three picks, a small spinning J while it works, and short notes so a failure is never silent. It lives in a closed shadow root, so the page's own CSS and scripts cannot reach it.
+  // The overlay: numbered badges beside the five picks, a small spinning J while it works, and short notes so a failure is never silent. It lives in a closed shadow root, so the page's own CSS and scripts cannot reach it.
   const host = Object.assign(document.createElement('div'), { id: 'jab-overlay' }), root = host.attachShadow({ mode: 'closed' }), sheet = new CSSStyleSheet();   // a constructed stylesheet is not blocked by a page's CSP
   host.style.cssText = 'all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;';
   sheet.replaceSync(`
@@ -60,7 +60,7 @@ if (self.document) {
     delay = setTimeout(() => spinner.classList.add('on'), 120);   // appears only if the work takes more than a blink
     try {
       const scores = await chrome.runtime.sendMessage({ controls: collect(), focus: els.indexOf(document.activeElement), page: { host: location.hostname, path: location.pathname, title: document.title, desc: document.querySelector('meta[name=description]')?.content ?? '' } });
-      ses = { els: scores.map((v, i) => [v ?? -Infinity, i]).sort((a, b) => b[0] - a[0]).slice(0, 3).map(([, i]) => els[i]) };   // the best three; the focused control has no score (null)
+      ses = { els: scores.map((v, i) => [v ?? -Infinity, i]).sort((a, b) => b[0] - a[0]).slice(0, 5).map(([, i]) => els[i]) };   // the best five; the focused control has no score (null)
       badges = ses.els.map((_, i) => draw('badge', i + 1));
       show();
       ses.els[0].focus();   // the first press lands on the best pick

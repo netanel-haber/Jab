@@ -12,7 +12,7 @@ As in:
 
 -----------
 
-Press Ctrl+Q: jab focuses the control the page most likely wants next, and marks the top three with small 1/2/3 badges; press it again to walk to the next one. Load this folder as an unpacked extension (chrome://extensions, Developer mode, Load unpacked).
+Press Ctrl+Q: jab focuses the control the page most likely wants next, and marks the top five with small 1-5 badges; press it again to walk to the next one. Load this folder as an unpacked extension (chrome://extensions, Developer mode, Load unpacked).
 
 ## How it works
 
@@ -22,7 +22,7 @@ It knows what you have typed: focus a search box, type, press Ctrl+Q, and the ne
 
 ## Accuracy
 
-On held-out pages the model never saw in training (602 labelled steps from about 340 pages, of every kind: shopping, news, blogs, finance, government, web apps, docs, education, travel, health, media), the first pick is the labelled one 47% of the time (top-1) and one of the top three 71% of the time; the scoring formula alone gets 18% and 36%. The labels are picks of what a visitor wants first on a page: 909 pages by me and 500 by Haiku looking at screenshots, so "right" means "what that labeller would pick". Two independent labelling passes over the same 24 pages agree on the first pick only 54% of the time (79% within each other's top three), so the labels, more than the model, limit how high a top-1 can be measured.
+On held-out pages the model never saw in training (602 labelled steps from about 340 pages, of every kind: shopping, news, blogs, finance, government, web apps, docs, education, travel, health, media), the first pick is the labelled one 47% of the time (top-1) one of the top three 71% of the time, and one of the top five 82%; the scoring formula alone gets 18% (top-1) and 36% (top-3). The labels are picks of what a visitor wants first on a page: 909 pages by me and 500 by Haiku looking at screenshots, so "right" means "what that labeller would pick". Two independent labelling passes over the same 24 pages agree on the first pick only 54% of the time (79% within each other's top three), so the labels, more than the model, limit how high a top-1 can be measured.
 
 ## Retrain
 
