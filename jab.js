@@ -69,7 +69,7 @@ if (self.document) {
     }
   }, true);
 } else {
-  // The ranker: a LightGBM model (ranker.json, made by train.py) scores every control of the page from cheap features (position, kind, what is on screen, words in the label), no neural network.
+  // The ranker: a LightGBM model (ranker.json, made by train.py: a ranker and a pick-or-not classifier, averaged) scores every control of the page from cheap features (position, kind, what is on screen, words in the label), no neural network.
   // rank(model, controls, focus): controls as collect() returns them, focus the index of the focused control or -1. Returns one score per control; null for the focused one.
   const length = (s) => [...s].length, onScreen = (c) => c.w >= 4 && c.h >= 4 && c.y + c.h >= 0 && c.y <= 900 && c.x <= 1280;
   const guess = (c) => (/^(input|textarea|select)/.test(c.kind) ? 3 : c.kind.startsWith('button') ? 2 : 1) + (c.box == 'main') + 2 * onScreen(c) - c.i / 100;
@@ -81,16 +81,21 @@ if (self.document) {
   };
   const rank = (model, all, focus) => {   // the same features, in the same order, as train.py
     const controls = all.filter((c) => c.i != focus), shown = controls.filter(onScreen);
-    return all.map((c) => {
-      if (c.i == focus) return null;
+    const rows = controls.map((c) => {
       const same = controls.filter((d) => d.kind == c.kind), here = new Set(`${c.label} ${c.href} ${c.name} ${c.ph}`.toLowerCase().match(/[a-z]{3,}/g));
       const f = { same_kind_rank: same.indexOf(c), same_kind_count: same.length, inputs_on_screen: shown.filter((d) => d.kind.startsWith('input')).length, screen_rank: shown.indexOf(c), on_screen_count: shown.length,
         controls_above: shown.filter((d) => d.y < c.y).length, no_parent_text: c.parent == '', before_len: length(c.before), kind: model.kinds[c.kind] ?? -1, box: model.boxes[c.box] ?? -1,
         x: c.x / 1280, y: c.y / 900, w: c.w / 1280, h: c.h / 900, index: c.i, index_frac: c.i / Math.max(1, c.n), count: c.n, label_len: length(c.label), nothing_focused: focus < 0,
         index_delta: focus >= 0 ? c.i - focus : 0, guess: guess(c) };
-      const x = [...model.features.map((name) => Number(f[name])), ...model.words.map((w) => (here.has(w) ? 1 : 0))];
-      return model.trees.reduce((sum, tree) => sum + walk(tree, x), 0);
+      return [...model.features.map((name) => Number(f[name])), ...model.words.map((w) => (here.has(w) ? 1 : 0))];
     });
+    const standardised = model.models.map((trees) => {   // each model's scores, standardised within the page
+      const raw = rows.map((x) => trees.reduce((sum, tree) => sum + walk(tree, x), 0)), mean = raw.reduce((a, b) => a + b, 0) / raw.length;
+      const sd = Math.sqrt(raw.reduce((a, b) => a + (b - mean) ** 2, 0) / raw.length) + 1e-9;
+      return raw.map((v) => (v - mean) / sd);
+    });
+    let k = 0;
+    return all.map((c) => (c.i == focus ? null : (k++, standardised.reduce((sum, z) => sum + z[k - 1], 0))));   // the models' standardised scores added; the focused control has none
   };
   const model = fetch(chrome.runtime.getURL('ranker.json')).then((r) => r.json());   // loaded once per worker start, in milliseconds
   chrome.runtime.onMessage.addListener(({ controls, focus }, _, send) => { model.then((m) => send(rank(m, controls, focus))); return true; });

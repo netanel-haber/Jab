@@ -3,7 +3,7 @@
 # dependencies = ["numpy", "lightgbm", "scikit-learn"]
 # ///
 """jab, which control should Tab reach next?   uv run train.py DATA.jsonl.gz ranker.json [--all]
-Trains a LightGBM ranker (LambdaRank) that scores every control of a page, and writes the trees as ranker.json for jab.js to run in the browser.
+Trains two LightGBM models (a LambdaRank ranker and a pick-or-not classifier) that score every control of a page, and writes their trees as ranker.json for jab.js to run in the browser.
 DATA is not included: one JSON object per line, one per labelled step: {"split": "train"|"eval", "controls": [what jab.js collect() returns for the page, up to 80],
 "focus": index of the focused control or -1, "target": index of the control a person would want next, "picks": all the controls the labeller picked}.
 Prints top-1 / top-3 on the "eval" pages. --all also trains on them, for the file you ship."""
@@ -45,28 +45,35 @@ X, y, group = [], [], []
 for step in train:   # relevance 2 for the labelled target, 1 for the labeller's other picks, 0 for the rest
     rows, ids = features(step)
     X.append(rows); y.append([2 if i == step["target"] else 1 if i in step["picks"] else 0 for i in ids]); group.append(len(ids))
-ranker = lgb.LGBMRanker(n_estimators=400, learning_rate=0.05, num_leaves=31, min_child_samples=10, subsample=0.8, subsample_freq=1, colsample_bytree=0.8, random_state=0, verbose=-1)
-ranker.fit(np.concatenate(X), np.concatenate(y), group=group)
+params = dict(n_estimators=400, learning_rate=0.05, num_leaves=31, min_child_samples=10, subsample=0.8, subsample_freq=1, colsample_bytree=0.8, random_state=0, verbose=-1)
+ranker = lgb.LGBMRanker(**params).fit(np.concatenate(X), np.concatenate(y), group=group)   # two models that see the page differently: one learns the order, one learns "is this the pick?"
+classifier = lgb.LGBMClassifier(**params).fit(np.concatenate(X), np.concatenate(y) == 2)
+z = lambda scores: (scores - scores.mean()) / (scores.std() + 1e-9)
+predict = lambda rows: z(ranker.predict(rows)) + z(classifier.predict(rows, raw_score=True))   # each model's scores, standardised within the page, then added
 
 top1 = top3 = 0
 for step in held:
     rows, ids = features(step)
-    order = [ids[j] for j in np.argsort(-ranker.predict(rows))]
+    order = [ids[j] for j in np.argsort(-predict(rows))]
     top1 += order[0] == step["target"]; top3 += step["target"] in order[:3]
 print(f"{len(held)} held-out steps{' (also trained on)' if '--all' in sys.argv else ''}: top-1 {top1 / len(held):.3f}, top-3 {top3 / len(held):.3f}")
 
-# ranker.json: every tree as flat arrays [feature, threshold, left, right, leaf values] (a negative child ~n is leaf n), and only the words some tree asks about.
+# ranker.json: every model's trees as flat arrays [feature, threshold, left, right, leaf values] (a negative child ~n is leaf n), and only the words some tree asks about.
 def flatten(node, f, thr, left, right, leaf):
     if "leaf_index" in node: leaf.append(round(node["leaf_value"], 5)); return ~(len(leaf) - 1)
     i = len(f); f.append(node["split_feature"]); thr.append(node["threshold"]); left.append(0); right.append(0)
     left[i] = flatten(node["left_child"], f, thr, left, right, leaf); right[i] = flatten(node["right_child"], f, thr, left, right, leaf)
     return i
-trees = []
-for info in ranker.booster_.dump_model()["tree_info"]:
-    tree = ([], [], [], [], []); flatten(info["tree_structure"], *tree); trees.append(list(tree))
-used = sorted({f - len(FEATURES) for t in trees for f in t[0] if f >= len(FEATURES)})
+def export(model):
+    trees = []
+    for info in model.booster_.dump_model()["tree_info"]:
+        tree = ([], [], [], [], []); flatten(info["tree_structure"], *tree); trees.append(list(tree))
+    return trees
+models = [export(ranker), export(classifier)]
+used = sorted({f - len(FEATURES) for trees in models for t in trees for f in t[0] if f >= len(FEATURES)})
 renumber = {len(FEATURES) + w: len(FEATURES) + j for j, w in enumerate(used)}
-for t in trees: t[0] = [renumber.get(f, f) for f in t[0]]
+for trees in models:
+    for t in trees: t[0] = [renumber.get(f, f) for f in t[0]]
 by_index = {i: w for w, i in WORDS.items()}
-json.dump({"features": FEATURES, "kinds": KINDS, "boxes": BOXES, "words": [by_index[w] for w in used], "trees": trees}, open(out, "w"), separators=(",", ":"))
-print(f"{len(trees)} trees and {len(used)} words written to {out}")
+json.dump({"features": FEATURES, "kinds": KINDS, "boxes": BOXES, "words": [by_index[w] for w in used], "models": models}, open(out, "w"), separators=(",", ":"))
+print(f"{len(models)} models of {len(models[0])} trees and {len(used)} words written to {out}")
