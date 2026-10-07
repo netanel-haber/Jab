@@ -1,4 +1,5 @@
 # private or generated, never committed
+steps.jsonl.gz
 records.jsonl.gz
 pipeline/
 tools/

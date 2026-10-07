@@ -1,10 +1,7 @@
 {
  "manifest_version": 3,
  "name": "jab",
- "version": "0.2.0",
- "permissions": [
-  "offscreen"
- ],
+ "version": "0.3.0",
  "background": {
   "service_worker": "background.js"
  },
@@ -18,14 +15,5 @@
    ]
   }
  ],
- "content_security_policy": {
-  "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
- },
- "cross_origin_embedder_policy": {
-  "value": "require-corp"
- },
- "cross_origin_opener_policy": {
-  "value": "same-origin"
- },
- "description": "Jev-style tab, not affiliated with Jev. Press Ctrl+Q: focus the control this page most likely wants next. A small model runs in your browser."
+ "description": "Jev-style tab, not affiliated with Jev. Press Ctrl+Q: focus the control this page most likely wants next. A small LightGBM ranker runs in your browser; nothing leaves it."
 }
