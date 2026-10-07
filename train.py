@@ -9,11 +9,13 @@ DATA is not included: one JSON object per line, one per labelled step: {"split":
 --all also trains on them, for the file you ship.
 Case studies are steps of the same shape (plus an optional "accept": other acceptable controls) for pages where jab got it wrong. --cases FILE adds them to the ledger kept next to the output (ranker.json.state/);
 every run then applies the whole ledger on top of the base models, which are trained once and kept there, so adding a case never means starting over. The step is a policy-gradient update: a softmax over the page's controls
-is the policy, and each case rewards the acceptable control(s), mixed with replayed ordinary steps so nothing else is forgotten. --cases-eval FILE: cases never trained on, to see how well the fix carries over."""
+is the policy, and each case rewards the acceptable control(s), mixed with replayed ordinary steps so nothing else is forgotten. --cases-eval FILE: cases never trained on, to see how well the fix carries over.
+Rolling back: the base models are never modified, so --rollback empties the ledger and exports them as they are; to relearn only the case studies after changing the method (the update below, or the features of
+a case), edit it and run again without --rollback: the ledger is applied from the base once more, and nothing else is retrained."""
 import argparse, bisect, collections, gzip, hashlib, json, math, pathlib, random, re, shutil
 import numpy as np, lightgbm as lgb
 
-ap = argparse.ArgumentParser(); ap.add_argument("data"); ap.add_argument("out"); ap.add_argument("--all", action="store_true"); ap.add_argument("--cases", nargs="*", default=[]); ap.add_argument("--cases-eval")
+ap = argparse.ArgumentParser(); ap.add_argument("data"); ap.add_argument("out"); ap.add_argument("--all", action="store_true"); ap.add_argument("--cases", nargs="*", default=[]); ap.add_argument("--cases-eval"); ap.add_argument("--rollback", action="store_true"); ap.add_argument("--rounds", type=int, default=100); ap.add_argument("--case-share", type=float, default=0.5); ap.add_argument("--lr", type=float, default=0.05)
 args = ap.parse_args(); data, out = args.data, args.out
 read = lambda path: [json.loads(line) for line in (gzip.open(path, "rt", encoding="utf-8") if str(path).endswith(".gz") else open(path, encoding="utf-8"))]
 steps = read(data)
@@ -36,7 +38,8 @@ WORDS = {w: i for i, (w, _) in enumerate(collections.Counter(w for s in train fo
 PAGE_WORDS = {w: i for i, (w, _) in enumerate(collections.Counter(w for s in train for w in page_words(s["page"])).most_common(300))}
 FEATURES = ["same_kind_rank", "same_kind_count", "inputs_on_screen", "screen_rank", "on_screen_count", "controls_above", "no_parent_text", "before_len", "kind", "box", "x", "y", "w", "h",
             "index", "index_frac", "count", "label_len", "nothing_focused", "index_delta", "guess",
-            "required", "is_submit", "dismissive", "first_field", "form_fields", "focus_filled", "in_focus_form", "after_focus", "empty_fields_left", "empty_field", "focus_dx", "focus_dy", "focus_dist", "submit_like", "fill", "sat", "lum", "round", "bold", "pointer", "icon", "sat_rank"]   # ranker.json carries this list; after it come one 0/1 per word
+            "required", "is_submit", "dismissive", "first_field", "form_fields", "focus_filled", "in_focus_form", "after_focus", "empty_fields_left", "empty_field", "focus_dx", "focus_dy", "focus_dist", "submit_like", "fill", "sat", "lum", "round", "bold", "pointer", "icon", "sat_rank",
+            "hit", "occluded_share", "in_layer", "lcover", "lw", "lh", "lz", "ledge", "layer_size", "layer_hit_share", "same_layer", "focus_in_layer", "same_region", "region_size", "in_dialog", "bar", "fixed", "page_scroll", "foreground"]   # ranker.json carries this list; after it come one 0/1 per word
 
 def features(step):   # one row per control except the focused one (it is already there); every count below is computed once per page, so a page of thousands of controls stays cheap
     focused = next((c for c in step["controls"] if c["i"] == step["focus"]), None)
@@ -51,6 +54,9 @@ def features(step):   # one row per control except the focused one (it is alread
     fields = [c for c in step["controls"] if is_field(c) and c["form"] >= 0]   # the typing fields that sit in a form
     form_fields = collections.Counter(c["form"] for c in fields); first_field = {}
     for c in fields: first_field.setdefault(c["form"], c["i"])
+    known = [c for c in controls if c["hit"] >= 0]; occluded_share = sum(c["hit"] == 0 for c in known) / len(known) if known else 0   # how much of what is on screen is covered by something on top
+    layer_size = collections.Counter(c["layer"] for c in controls if c["layer"] >= 0); layer_hits = collections.Counter(c["layer"] for c in known if c["hit"] == 1 and c["layer"] >= 0); layer_known = collections.Counter(c["layer"] for c in known if c["layer"] >= 0)
+    region_size = collections.Counter(c["region"] for c in controls if c["region"] >= 0)
     empty_left = sum(not c["filled"] and c["form"] == focused["form"] for c in fields if c["i"] != step["focus"]) if focused and focused["form"] >= 0 else 0   # in the focused control's form
     page_bag = np.zeros(len(PAGE_WORDS)); page_bag[[PAGE_WORDS[w] for w in page_words(step["page"]) if w in PAGE_WORDS]] = 1   # the same for every control of the page
     rows = []
@@ -66,7 +72,13 @@ def features(step):   # one row per control except the focused one (it is alread
                  after_focus=in_focus_form and c["i"] > step["focus"], empty_fields_left=empty_left, empty_field=is_field(c) and not c["filled"],
                  focus_dx=(c["x"] - focused["x"]) / 1280 if focused else 0, focus_dy=(c["y"] - focused["y"]) / 900 if focused else 0,   # where the control sits relative to the one you are in
                  focus_dist=math.hypot(c["x"] - focused["x"], c["y"] - focused["y"]) / 1000 if focused else 0, submit_like=submit_like(c),
-                 fill=c["fill"], sat=c["sat"], lum=c["lum"], round=c["round"], bold=c["bold"], pointer=c["pointer"], icon=c["icon"], sat_rank=sat_rank.get(c["i"], -1))   # how it looks
+                 fill=c["fill"], sat=c["sat"], lum=c["lum"], round=c["round"], bold=c["bold"], pointer=c["pointer"], icon=c["icon"], sat_rank=sat_rank.get(c["i"], -1),   # how it looks
+                 hit=c["hit"], occluded_share=occluded_share, in_layer=c["layer"] >= 0, lcover=c["lcover"], lw=c["lw"], lh=c["lh"], lz=c["lz"], ledge=c["ledge"],   # where it sits in the stack of layers above the page
+                 layer_size=layer_size[c["layer"]] if c["layer"] >= 0 else 0, layer_hit_share=layer_hits[c["layer"]] / layer_known[c["layer"]] if layer_known[c["layer"]] else 1,
+                 same_layer=bool(focused) and c["layer"] >= 0 and c["layer"] == focused["layer"], focus_in_layer=bool(focused) and focused["layer"] >= 0,
+                 same_region=bool(focused) and c["region"] >= 0 and c["region"] == focused["region"], region_size=region_size[c["region"]] if c["region"] >= 0 else 0,
+                 in_dialog=c["dialog"], bar=c["bar"], fixed=c["fixed"], page_scroll=step["page"].get("scroll", 1.0),
+                 foreground=occluded_share if c["layer"] >= 0 and c["hit"] == 1 else 0)   # in a layer of its own, on top, with the page behind it covered: what the site is presenting
         bag = np.zeros(len(WORDS)); bag[[WORDS[w] for w in words(c) if w in WORDS]] = 1
         rows.append(np.concatenate([[float(f[name]) for name in FEATURES], bag, page_bag]))
     return np.array(rows), [c["i"] for c in controls]
@@ -101,14 +113,18 @@ show = lambda name, before, after=None: print(f"{name}: top-1 {before[0]:.3f}  t
 
 # The case-study step: the ledger of cases is applied on top of the base models (re-entrant: the same cases always give the same result).
 ledger = state / "cases"; ledger.mkdir(exist_ok=True)
+if args.rollback:   # undo every case study: the ledger is emptied and the base models are exported as they are
+    for path in ledger.iterdir(): path.unlink()
+    print("rolled back: the case-study ledger is empty")
 for path in args.cases: shutil.copy(path, ledger / (hashlib.sha1(pathlib.Path(path).read_bytes()).hexdigest()[:12] + pathlib.Path(path).suffix))   # the same file twice is one entry
 cases = [s for path in sorted(ledger.iterdir()) for s in read(path)]
+print(f"case-study ledger: {len(cases)} steps from {len(list(ledger.iterdir()))} file(s) in {ledger}") if cases else None
 held_rows = prepared(held); cases_eval = prepared(read(args.cases_eval)) if args.cases_eval else []
 models = base
 if cases:
     case_rows = prepared(cases); show("held-out steps, base", accuracy(base, held_rows)); show(f"{len(cases)} case steps, base", accuracy(base, case_rows))
     if cases_eval: show("unseen case steps, base", accuracy(base, cases_eval))
-    replay = random.Random(0).sample(train, min(1500, len(train))); weight = min(5.0, 0.25 * len(replay) / len(cases))
+    replay = random.Random(0).sample(train, min(1500, len(train))); weight = args.case_share * len(replay) / len(cases)   # the cases get this share of the update's total weight, relative to the replayed steps
     groups = [(features(s), s, 1.0) for s in replay] + [(features(s), s, weight) for s in cases]
     X = np.concatenate([g[0][0] for g in groups]); sizes = [len(g[0][1]) for g in groups]
     accepted = [np.array([i in {g[1]["target"], *g[1].get("accept", [])} for i in g[0][1]], dtype=float) for g in groups]; weights = [g[2] for g in groups]
@@ -118,8 +134,8 @@ if cases:
             s = preds[at:at + size]; p = np.exp(s - s.max()); p /= p.sum(); mass = max((p * ok).sum(), 1e-9)
             grad[at:at + size] = w * (p - p * ok / mass); hess[at:at + size] = w * np.maximum(p * (1 - p), 1e-6); at += size
         return grad, hess
-    tune = dict(objective=policy_gradient, learning_rate=0.05, num_leaves=15, min_data_in_leaf=5, feature_fraction=0.8, verbose=-1)
-    models = [lgb.train(tune, lgb.Dataset(X, label=np.zeros(len(X)), free_raw_data=False), num_boost_round=40, init_model=b) for b in base]
+    tune = dict(objective=policy_gradient, learning_rate=args.lr, num_leaves=15, min_data_in_leaf=5, feature_fraction=0.8, verbose=-1)
+    models = [lgb.train(tune, lgb.Dataset(X, label=np.zeros(len(X)), free_raw_data=False), num_boost_round=args.rounds, init_model=b) for b in base]
     show("held-out steps", accuracy(base, held_rows), accuracy(models, held_rows)); show(f"{len(cases)} case steps", accuracy(base, case_rows), accuracy(models, case_rows))
     if cases_eval: show("unseen case steps", accuracy(base, cases_eval), accuracy(models, cases_eval))
 else: show(f"{len(held)} held-out steps{' (also trained on)' if args.all else ''}", accuracy(base, held_rows))
