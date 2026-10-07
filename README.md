@@ -22,7 +22,7 @@ It knows what you have typed: focus a search box, type, press Ctrl+Q, and the ne
 
 ## Accuracy
 
-On held-out pages the model never saw in training (602 labelled steps from about 340 pages, of every kind: shopping, news, blogs, finance, government, web apps, docs, education, travel, health, media), the first pick is the labelled one 47% of the time (top-1) and one of the top three 71% of the time; the scoring formula alone gets 18% and 36%. The labels are picks of what a visitor wants first on a page: 909 pages by me and 500 by Haiku looking at screenshots, so "right" means "what that labeller would pick".
+On held-out pages the model never saw in training (602 labelled steps from about 340 pages, of every kind: shopping, news, blogs, finance, government, web apps, docs, education, travel, health, media), the first pick is the labelled one 47% of the time (top-1) and one of the top three 71% of the time; the scoring formula alone gets 18% and 36%. The labels are picks of what a visitor wants first on a page: 909 pages by me and 500 by Haiku looking at screenshots, so "right" means "what that labeller would pick". Two independent labelling passes over the same 24 pages agree on the first pick only 54% of the time (79% within each other's top three), so the labels, more than the model, limit how high a top-1 can be measured.
 
 ## Retrain
 
