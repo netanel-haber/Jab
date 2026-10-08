@@ -231,13 +231,31 @@ if (self.document) {
     addEventListener(type, end, true);
   // Ctrl+Q types nothing and Chrome does not use it; any other key (Enter, Escape, arrows, Tab, ...) ends the session
   // While Ctrl+Q is held down, a digit 1-4 goes straight to that stop; any other time Ctrl+digit is left to Chrome.
+  // Inside a session, Ctrl+Q moves to the next stop only on a tap (let go within 0.4 s, no digit): holding it is for choosing.
   let held = false,
-    pick = 0;
+    pick = 0,
+    tapped = 0;
   const ctrl = (e) => e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
   const isPress = (e) => e.code == "KeyQ" && ctrl(e);
   const digit = (e) => (held && ctrl(e) && /^Digit[1-4]$/.test(e.code) ? Number(e.code[5]) : 0);
-  addEventListener("keyup", (e) => (e.key == "Control" || e.code == "KeyQ") && (held = false), true);
-  addEventListener("blur", () => (held = false));
+  const step = () => {
+    // walk the stored picks, no recompute; going round to 1 again flashes its badge
+    const next = (ses.els.indexOf(active()) + 1) % ses.els.length;
+    if (next == 0) ses.badges[0].animate([{ transform: "scale(1.7)" }, { transform: "none" }], 450);
+    touch();
+    ses.els[next].focus();
+  };
+  addEventListener(
+    "keyup",
+    (e) => {
+      if (e.key != "Control" && e.code != "KeyQ") return;
+      if (tapped && performance.now() - tapped < 400 && ses) step();
+      held = false;
+      tapped = 0;
+    },
+    true,
+  );
+  addEventListener("blur", () => (held = tapped = 0));
   addEventListener(
     "keydown",
     (e) => !isPress(e) && !digit(e) && !["Control", "Shift", "Alt", "Meta"].includes(e.key) && end(),
@@ -256,6 +274,7 @@ if (self.document) {
       held = true;
       if (n) {
         // Ctrl+Q, then a digit: that stop now, or as soon as the ranking arrives
+        tapped = 0; // a digit, not a tap
         if (ses && n <= ses.els.length) {
           touch();
           ses.els[n - 1].focus();
@@ -264,11 +283,8 @@ if (self.document) {
       }
       if (busy) return; // one press at a time
       if (ses?.els.every((el) => el.isConnected)) {
-        // inside a session: walk the stored picks, no recompute; going round to 1 again flashes its badge
-        const next = (ses.els.indexOf(active()) + 1) % ses.els.length;
-        if (next == 0) ses.badges[0].animate([{ transform: "scale(1.7)" }, { transform: "none" }], 450);
-        touch();
-        return ses.els[next].focus();
+        tapped = performance.now(); // inside a session: the move waits for the keys to be let go (see keyup)
+        return touch();
       }
       end(); // no session, or a pick left the page (re-rendered): start over
       busy = true;
