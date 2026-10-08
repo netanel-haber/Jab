@@ -180,8 +180,8 @@ if (self.document) {
     sheet = new CSSStyleSheet();
   host.style.cssText = "all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;";
   sheet.replaceSync(`
-    .badge { position: fixed; min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box; border-radius: 9px; background: #2b8f58; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
-    .badge.now { background: #1e6e42; outline: 2px solid #fff; }
+    .badge { position: fixed; min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box; border-radius: 9px; background: #2b6f4b; color: #fff; opacity: .85; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+    .badge.now { background: #00e676; color: #00210e; outline: 2px solid #00210e; box-shadow: 0 0 0 4px rgba(0, 230, 118, .55), 0 2px 6px rgba(0, 0, 0, .4); transform: scale(1.25); z-index: 1; }
     .badge.off { opacity: .65; }
     .note { position: fixed; right: 16px; bottom: 56px; max-width: 280px; padding: 6px 10px; border-radius: 6px; background: #1f4f35; color: #fff; font: 12px/1.4 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
     .spinner { position: fixed; right: 16px; bottom: 16px; width: 28px; height: 28px; font: 700 15px/28px system-ui, sans-serif; text-align: center; color: #2b8f58; opacity: 0; transition: opacity .2s; }
@@ -230,21 +230,39 @@ if (self.document) {
   for (const type of ["input", "change", "submit", "pointerdown", "popstate", "hashchange", "pagehide"])
     addEventListener(type, end, true);
   // Ctrl+Q types nothing and Chrome does not use it; any other key (Enter, Escape, arrows, Tab, ...) ends the session
-  const isPress = (e) => e.code == "KeyQ" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+  // While Ctrl is still held from a Ctrl+Q, a digit 1-4 goes straight to that stop; any other time Ctrl+digit is left to Chrome.
+  let held = false,
+    pick = 0;
+  const ctrl = (e) => e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+  const isPress = (e) => e.code == "KeyQ" && ctrl(e);
+  const digit = (e) => (held && ctrl(e) && /^Digit[1-4]$/.test(e.code) ? Number(e.code[5]) : 0);
+  addEventListener("keyup", (e) => e.key == "Control" && (held = false), true);
+  addEventListener("blur", () => (held = false));
   addEventListener(
     "keydown",
-    (e) => !isPress(e) && !["Control", "Shift", "Alt", "Meta"].includes(e.key) && end(),
+    (e) => !isPress(e) && !digit(e) && !["Control", "Shift", "Alt", "Meta"].includes(e.key) && end(),
     true,
   );
 
   addEventListener(
     "keydown",
     async (e) => {
-      if (!isPress(e)) return;
+      const n = digit(e);
+      if (!isPress(e) && !n) return;
       if (!chrome.runtime?.id) return note("jab was reloaded: refresh this page to use it."); // a stale copy of this script leaves Ctrl+Q alone
       e.preventDefault();
       e.stopPropagation();
-      if (e.repeat || busy) return; // holding the keys down is one press; one press at a time
+      if (e.repeat) return; // holding the keys down is one press
+      held = true;
+      if (n) {
+        // Ctrl+Q, then a digit: that stop now, or as soon as the ranking arrives
+        if (ses && n <= ses.els.length) {
+          touch();
+          ses.els[n - 1].focus();
+        } else if (busy) pick = n;
+        return;
+      }
+      if (busy) return; // one press at a time
       if (ses?.els.every((el) => el.isConnected)) {
         // inside a session: walk the stored picks, no recompute; going round to 1 again flashes its badge
         const next = (ses.els.indexOf(active()) + 1) % ses.els.length;
@@ -254,6 +272,7 @@ if (self.document) {
       }
       end(); // no session, or a pick left the page (re-rendered): start over
       busy = true;
+      pick = 0;
       const mine = gen,
         from = active();
       const delay = setTimeout(() => spinner.classList.add("on"), 120); // appears only if the work takes more than a blink
@@ -287,7 +306,7 @@ if (self.document) {
         ses = { els: best, badges: best.map((_, i) => draw("badge", i + 1)) };
         show();
         touch();
-        best[0].focus(); // the first press lands on the best pick
+        best[Math.min(pick || 1, best.length) - 1].focus(); // the first press lands on the best pick (or the stop a digit asked for)
       } catch (error) {
         note(`jab could not answer: ${error.message}`);
       } finally {
