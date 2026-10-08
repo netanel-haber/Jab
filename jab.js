@@ -208,6 +208,7 @@ if (self.document) {
       const arrow =
         r.top >= innerHeight ? "↓" : r.bottom <= 0 ? "↑" : r.left >= innerWidth ? "→" : r.right <= 0 ? "←" : "";
       badge.textContent = `${i + 1}${arrow}`;
+      badge.hidden = !r.width && !r.height; // the page has hidden it
       badge.classList.toggle("off", !!arrow);
       badge.classList.toggle("now", ses.els[i] == active());
       badge.style.cssText = `left: ${Math.min(Math.max(2, r.left - 8), innerWidth - 30)}px; top: ${Math.min(Math.max(2, r.top - 8), innerHeight - 22)}px`;
@@ -240,12 +241,28 @@ if (self.document) {
   const ctrl = (e) => e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
   const isPress = (e) => e.code == "KeyQ" && ctrl(e);
   const digit = (e) => (held && ctrl(e) && /^Digit[1-4]$/.test(e.code) ? Number(e.code[5]) : 0);
+  // Focus pick i. A pick that does not take the focus (the page has since hidden it, or a pop-up keeps the focus to itself)
+  // is replaced by the next control in the ranking, or dropped when the ranking runs out; with no pick left the session ends.
+  const land = (i) => {
+    while (ses?.els.length) {
+      i %= ses.els.length;
+      const el = ses.els[i];
+      el.focus();
+      if (active() == el) return touch(), show();
+      if (ses.rest.length) ses.els[i] = ses.rest.shift();
+      else {
+        ses.els.splice(i, 1);
+        ses.badges.splice(i, 1)[0].remove();
+      }
+    }
+    end();
+    note("jab could not move the focus here: the page keeps it where it is.");
+  };
   const step = () => {
     // walk the stored picks, no recompute; going round to 1 again flashes its badge
     const next = (ses.els.indexOf(active()) + 1) % ses.els.length;
     if (next == 0) ses.badges[0].animate([{ transform: "scale(1.7)" }, { transform: "none" }], 450);
-    touch();
-    ses.els[next].focus();
+    land(next);
   };
   addEventListener(
     "keyup",
@@ -278,8 +295,7 @@ if (self.document) {
         // Ctrl+Q, then a digit: that stop now, or as soon as the ranking arrives
         tapped = 0; // a digit, not a tap
         if (ses && n <= ses.els.length) {
-          touch();
-          ses.els[n - 1].focus();
+          land(n - 1);
         } else if (busy) pick = n;
         return;
       }
@@ -314,17 +330,18 @@ if (self.document) {
         ]);
         if (mine != gen || active() != from) return; // something happened while it ranked (typing, a click, ...): drop the answer
         // the best four; the focused control has no score (null)
-        const best = scores
+        const ranked = scores
           .map((v, i) => [v, els[i]])
           .filter(([v]) => v !== null)
           .sort((a, b) => b[0] - a[0])
-          .slice(0, 4)
+          .slice(0, 24)
           .map(([, el]) => el);
+        const best = ranked.slice(0, 4); // the next 20 stand in for a pick that turns out not to take the focus
         if (!best.length) return note("jab found nothing to jump to here.");
-        ses = { els: best, badges: best.map((_, i) => draw("badge", i + 1)) };
+        ses = { els: best, rest: ranked.slice(4), badges: best.map((_, i) => draw("badge", i + 1)) };
         show();
         touch();
-        best[Math.min(pick || 1, best.length) - 1].focus(); // the first press lands on the best pick (or the stop a digit asked for)
+        land(Math.min(pick || 1, best.length) - 1); // the first press lands on the best pick (or the stop a digit asked for)
       } catch (error) {
         note(`jab could not answer: ${error.message}`);
       } finally {
