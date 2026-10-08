@@ -12,5 +12,5 @@
       "all_frames": true
     }
   ],
-  "description": "Jev-style tab, not affiliated with Jev. Press Ctrl+Q: focus the control this page most likely wants next. A small LightGBM ranker runs in your browser; nothing leaves it."
+  "description": "Ctrl+Q tabs to what you want next, powered by a local 2MB 2016 classifier"
 }
