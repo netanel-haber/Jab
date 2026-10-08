@@ -181,7 +181,7 @@ if (self.document) {
   host.style.cssText = "all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;";
   sheet.replaceSync(`
     .badge { position: fixed; min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box; border-radius: 9px; background: #2b6f4b; color: #fff; opacity: .85; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
-    .badge.now { background: #00e676; color: #00210e; outline: 2px solid #00210e; box-shadow: 0 0 0 4px rgba(0, 230, 118, .55), 0 2px 6px rgba(0, 0, 0, .4); transform: scale(1.25); z-index: 1; }
+    .badge.now { background: #00e676; color: #00210e; outline: 2px solid #00210e; box-shadow: 0 0 0 4px rgba(0, 230, 118, .55), 0 2px 6px rgba(0, 0, 0, .4); transform: scale(1.15); z-index: 1; }
     .badge.off { opacity: .65; }
     .note { position: fixed; right: 16px; bottom: 56px; max-width: 280px; padding: 6px 10px; border-radius: 6px; background: #1f4f35; color: #fff; font: 12px/1.4 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
     .spinner { position: fixed; right: 16px; bottom: 16px; width: 28px; height: 28px; font: 700 15px/28px system-ui, sans-serif; text-align: center; color: #2b8f58; opacity: 0; transition: opacity .2s; }
@@ -230,13 +230,13 @@ if (self.document) {
   for (const type of ["input", "change", "submit", "pointerdown", "popstate", "hashchange", "pagehide"])
     addEventListener(type, end, true);
   // Ctrl+Q types nothing and Chrome does not use it; any other key (Enter, Escape, arrows, Tab, ...) ends the session
-  // While Ctrl is still held from a Ctrl+Q, a digit 1-4 goes straight to that stop; any other time Ctrl+digit is left to Chrome.
+  // While Ctrl+Q is held down, a digit 1-4 goes straight to that stop; any other time Ctrl+digit is left to Chrome.
   let held = false,
     pick = 0;
   const ctrl = (e) => e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
   const isPress = (e) => e.code == "KeyQ" && ctrl(e);
   const digit = (e) => (held && ctrl(e) && /^Digit[1-4]$/.test(e.code) ? Number(e.code[5]) : 0);
-  addEventListener("keyup", (e) => e.key == "Control" && (held = false), true);
+  addEventListener("keyup", (e) => (e.key == "Control" || e.code == "KeyQ") && (held = false), true);
   addEventListener("blur", () => (held = false));
   addEventListener(
     "keydown",
