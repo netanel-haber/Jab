@@ -1,19 +1,16 @@
 {
- "manifest_version": 3,
- "name": "jab",
- "version": "0.3.0",
- "background": {
-  "service_worker": "jab.js"
- },
- "content_scripts": [
-  {
-   "matches": [
-    "<all_urls>"
-   ],
-   "js": [
-    "jab.js"
-   ]
-  }
- ],
- "description": "Jev-style tab, not affiliated with Jev. Press Ctrl+Q: focus the control this page most likely wants next. A small LightGBM ranker runs in your browser; nothing leaves it."
+  "manifest_version": 3,
+  "name": "jab",
+  "version": "0.4.0",
+  "background": {
+    "service_worker": "jab.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["jab.js"],
+      "all_frames": true
+    }
+  ],
+  "description": "Jev-style tab, not affiliated with Jev. Press Ctrl+Q: focus the control this page most likely wants next. A small LightGBM ranker runs in your browser; nothing leaves it."
 }
