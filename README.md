@@ -2,44 +2,18 @@
 
 Ctrl+Q tabs to what you want next, using 2MB of decision trees from 2016.
 
-As in:
-
------------
-
 > **Mom can we have `tab`?**
 
 > We have `tab` at home.
 
------------
-
-## Use
-
-| Keys | What happens |
+| Keys | |
 |---|---|
-| Ctrl+Q | Focuses the control this page most likely wants next and puts badges 1-4 on its top four picks |
-| Ctrl+Q again (a quick tap) | Next of the four, round to 1 again |
-| Hold Ctrl+Q, press 1-4 | Straight to that stop (works the moment you press, even before the badges appear) |
+| Ctrl+Q | Go to the best guess, badge the top 4 |
+| Tap again | Next of the 4 |
+| Hold Ctrl+Q + 1-4 | That one |
 
-The badge of the control you are on is bright green; a pick that is scrolled out of view gets a badge at the screen edge with an arrow. A session ends as soon as you do anything else (type, click, press another key, submit, navigate, or move focus elsewhere) or after 10 seconds without a press; the next Ctrl+Q ranks the page again from where you are, so after typing into a search box it goes to the search button. Ctrl+digit is only taken while Ctrl+Q is held; any other time it is Chrome's.
+Anything else you do ends it. Runs locally in ~20 ms; nothing leaves the browser.
 
-jab reaches controls inside web components (open shadow DOM) and inside frames. It cannot run on `chrome://` pages, the Chrome Web Store or Chrome's PDF viewer, and on local `file://` pages only if "Allow access to file URLs" is on for it.
+Install: chrome://extensions, Developer mode, Load unpacked.
 
-Install: load this folder as an unpacked extension (chrome://extensions, Developer mode, Load unpacked).
-
-## How it works
-
-`jab.js` lists every focusable control on the page (no cap; only a page with more than 5,000 gets its most relevant 5,000) with plain facts about each: kind, label, where it is and how big, whether it is on screen, how it looks (filled, colourful, round, bold, icon only), its form (is it a submit button, is it filled in, is it the first field), where it sits relative to the control you are in, and how it sits in the page's layers (is it in a layer of its own above the page, how much of the view that layer covers, is the control on top where it is or covered, is the page behind it covered, is the page scrollable at all), plus the words in its label, its link and the page's address and title. The extension's service worker scores them with two LightGBM models (gradient-boosted decision trees, 1,000 trees in all; a ranker and a pick-or-not classifier) whose standardised scores are added (`ranker.json`, 2 MB). No neural network: a press takes about 15-30 ms on a normal page, on the CPU. Nothing is cached and nothing leaves the browser.
-
-Two rules were taught by case studies, as general rules over that metadata and not as sites: after you type, the control that finishes what you typed comes next; and a part of the page that the site foregrounds (in its own layer, on top, with the page behind it covered) and a bar the page keeps in reach (never scrolls away) earn extra weight, without the page's main search field losing its place.
-
-## Accuracy
-
-Every page (1,396 pages with usable screenshots; 226 of them held out) was graded from its screenshot with one written rubric: the four controls a visitor would want first, in order (a form's fields in order and then its submit button; a prominent search box and its button; otherwise the main calls to action and key destinations; a covering dialog's primary button first), plus up to six that would also be fine. Two independent grading passes over 119 pages agree on the first pick 91% of the time (97% within each other's top three; 86% overlap of the four). On the held-out pages, when you land on a page and press Ctrl+Q, the first stop is one a person would want 99% of the time and 88% of the four stops are; the same model trained on the earlier, noisier labels got 93% and 79% against these grades.
-
-On generated pages that exhibit the case-study rules (50 per case study, in structures the model never trained on), real Chrome with the real extension puts every control the rule favours among the four stops on 100% of pages, and the sticky-header and cookie-notice counter-examples stay at 100%. The weak spot: on pages with a foregrounded layer (a menu that slides over the page), the page's search field usually comes first and the layer's controls follow.
-
-## Retrain, and case studies on top
-
-`uv run train.py data.jsonl.gz ranker.json` (the data is not included; its format is at the top of `train.py`). Add `--all` to also train on the held-out pages for the file you ship. It takes a few minutes, and the same data always gives the same `ranker.json`. Formatting: `npx prettier --print-width 120 --write jab.js` and `uvx ruff format --line-length 120 train.py`.
-
-When jab gets a page wrong, find the general rule behind it, give the model the metadata to see it, generate about 50 varied pages that exhibit it (plus counter-examples) and turn them into case steps: the same shape as the data (the page, the focus, the control you wanted; `accept` lists other acceptable ones). `uv run train.py data.jsonl.gz ranker.json --cases my-case.jsonl` adds it to a ledger kept next to the output (`ranker.json.state/`) and applies the whole ledger on top of the base models, which are trained once and kept there. The step is a policy-gradient update: a softmax over the page's controls is the policy and each case rewards the acceptable control, mixed with replayed ordinary steps so nothing else is forgotten. Running it again with the same cases gives the same result, and adding a case never means starting over. `--cases-eval FILE` scores cases the update never saw, to check that a fix carries over. `--rollback` empties the ledger and exports the base models as they are; changing how the case step works means editing it and running again, which redoes only that step.
+Retrain: `uv run train.py data.jsonl.gz ranker.json` (data not included; format and case-study options in `train.py`).
