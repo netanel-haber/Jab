@@ -227,8 +227,10 @@ if (self.document) {
   // focus left our picks (checked once it has moved, so a web component's retargeted events cannot fool it)
   addEventListener("focusout", () => setTimeout(() => ses && !ses.els.includes(active()) && end()), true);
   // typing, clicking, submitting, navigating: the next press re-ranks from there
-  for (const type of ["input", "change", "submit", "pointerdown", "popstate", "hashchange", "pagehide"])
+  for (const type of ["input", "submit", "pointerdown", "popstate", "hashchange", "pagehide"])
     addEventListener(type, end, true);
+  // a text field fires "change" when focus leaves it, which is jab moving on: only a select, checkbox or radio changing counts
+  addEventListener("change", (e) => !e.target.matches?.(TYPED) && end(), true);
   // Ctrl+Q types nothing and Chrome does not use it; any other key (Enter, Escape, arrows, Tab, ...) ends the session
   // While Ctrl+Q is held down, a digit 1-4 goes straight to that stop; any other time Ctrl+digit is left to Chrome.
   // Inside a session, Ctrl+Q moves to the next stop only on a tap (let go within 0.4 s, no digit): holding it is for choosing.
