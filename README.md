@@ -17,5 +17,3 @@ Anything else you do ends it. Runs locally in ~20 ms; nothing leaves the browser
 Retrain: `uv run train.py data.jsonl.gz ranker.json` (data not included; format and case-study options in `train.py`).
 
 Built on [LightGBM](https://github.com/microsoft/LightGBM) (Microsoft, 2016; Ke et al., NeurIPS 2017), [NumPy](https://numpy.org) and [scikit-learn](https://scikit-learn.org). Training pages labelled by Claude.
-
-© 2026 Netanel Haber, MIT License.
