@@ -12,5 +12,10 @@
       "all_frames": true
     }
   ],
-  "description": "Ctrl+Q tabs to what you want next, using 2MB of decision trees from 2016"
+  "description": "Ctrl+Q tabs to what you want next, using 2MB of decision trees from 2016",
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
 }
