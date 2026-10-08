@@ -14,8 +14,6 @@ Ctrl+Q tabs to what you want next, using 2MB of decision trees from 2016.
 
 Anything else you do ends it. Runs locally in ~20 ms; nothing leaves the browser.
 
-Install: chrome://extensions, Developer mode, Load unpacked.
-
 Retrain: `uv run train.py data.jsonl.gz ranker.json` (data not included; format and case-study options in `train.py`).
 
 Built on [LightGBM](https://github.com/microsoft/LightGBM) (Microsoft, 2016; Ke et al., NeurIPS 2017), [NumPy](https://numpy.org) and [scikit-learn](https://scikit-learn.org). Training pages labelled by Claude.
