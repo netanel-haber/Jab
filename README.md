@@ -1,4 +1,4 @@
-# jab
+<img src="icon.png" alt="jab" width="128">
 
 Ctrl+Q tabs to what you want next, using 2MB of decision trees from 2016.
 
