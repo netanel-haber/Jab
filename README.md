@@ -1,6 +1,6 @@
 <img src="icon.png" alt="jab" height="64">
 
-Ctrl+Q tabs to what you want next, using 2MB of decision trees from 2016.
+Ctrl+Q tabs to what you want next, using 2MB of gradient-boosted trees from 2016.
 
 > **Mom can we have `tab`?**
 
