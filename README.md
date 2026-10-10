@@ -12,11 +12,9 @@ Ctrl+Q tabs to what you want next, using 2MB of gradient-boosted trees from 2016
 | Tap again | Next of the 4 |
 | Hold Ctrl+Q + 1-4 | That one |
 
-Anything else you do ends it. Runs locally in ~20 ms; nothing leaves the browser.
+Anything else you do ends it. Runs locally in ~20 ms; nothing leaves the browser ([privacy policy](PRIVACY.md)).
 
-Retrain: `uv run train.py data.jsonl.gz ranker.json` (data not included; format and case-study options in `train.py`).
-
-Built on [LightGBM](https://github.com/microsoft/LightGBM) (Microsoft, 2016; Ke et al., NeurIPS 2017), [NumPy](https://numpy.org) and [scikit-learn](https://scikit-learn.org). Training pages labelled by Claude.
+Built on [LightGBM](https://github.com/microsoft/LightGBM) (Microsoft, 2016; Ke et al., NeurIPS 2017), [NumPy](https://numpy.org) and [scikit-learn](https://scikit-learn.org). Trained on 1,244 real sites labelled by Claude and 5,000 generated pages labelled by rule.
 
 <details><summary>MIT License</summary>
 

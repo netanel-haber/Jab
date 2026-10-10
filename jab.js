@@ -12,6 +12,9 @@ if (self.document) {
     "textarea,input:not([type=checkbox],[type=radio],[type=submit],[type=button],[type=reset],[type=image],[type=hidden],[type=file],[type=range],[type=color])";
   const EDITABLE = '[contenteditable=""],[contenteditable=true],[role=textbox],[role=searchbox],[role=combobox]';
   const DIALOG = "dialog,[role=dialog],[role=alertdialog],[aria-modal=true]";
+  const HEADING = "h1,h2,h3,h4,h5,h6,[role=heading]";
+  const CHROME =
+    "header,footer,nav,aside,[role=banner],[role=navigation],[role=contentinfo],[role=complementary],[role=menubar]";
 
   // by code point: slicing a string can split an emoji into a lone surrogate
   const cut = (s, n) => Array.from(s).slice(0, n).join("");
@@ -59,7 +62,23 @@ if (self.document) {
   const collect = () => {
     const sticks = new Map(),
       regions = new Map(),
-      layers = new Map();
+      layers = new Map(),
+      groups = new Map();
+    // the repeated item a control sits in (a card, a result, a row, a menu entry): how many siblings look alike (same tag and
+    // first class), and which of them this one is
+    const sig = (el) => `${el.tagName} ${(el.getAttribute("class") ?? "").trim().split(/\s+/)[0]}`;
+    const itemOf = (e) => {
+      for (let p = e, k = 0; k < 5 && p.parentElement; p = p.parentElement, k++) {
+        if (!groups.has(p.parentElement)) {
+          const g = new Map();
+          for (const s of p.parentElement.children) g.get(sig(s))?.push(s) ?? g.set(sig(s), [s]);
+          groups.set(p.parentElement, g);
+        }
+        const like = groups.get(p.parentElement).get(sig(p));
+        if (like.length >= 3) return { el: p, n: like.length, at: like.indexOf(p) };
+      }
+      return null;
+    };
     const isFixed = (el) => {
       if (!el || el == document.documentElement) return false;
       if (!sticks.has(el))
@@ -125,6 +144,17 @@ if (self.document) {
       let before = "";
       for (let p = e; p && !before; p = p.parentElement) before = text(p.previousElementSibling, 20);
       if (b && !regions.has(b)) regions.set(b, regions.size);
+      // what it is about: a heading in or around it, the size of its type, the card or paragraph it sits in, where it leads
+      const hd = e.closest(HEADING) ?? e.querySelector(HEADING),
+        it = itemOf(e),
+        block = e.parentElement?.closest("p,li,td,dd,blockquote,figcaption"),
+        frame = e.closest(CHROME);
+      const site = URL.parse(e.getAttribute("href") ?? "", location.href)?.host;
+      const pics = [...e.querySelectorAll("img,video")].slice(0, 4).map((m) => {
+        const p = m.getBoundingClientRect();
+        return p.width * p.height;
+      });
+      if (st.backgroundImage.startsWith("url")) pics.push(r.width * r.height);
       return {
         i,
         n: els.length,
@@ -166,6 +196,18 @@ if (self.document) {
         y: q(r.y),
         w: q(r.width),
         h: q(r.height),
+        head: hd ? (/^H\d$/.test(hd.tagName) ? Number(hd.tagName[1]) : Number(hd.getAttribute("aria-level")) || 2) : 0,
+        font: Math.round(parseFloat((hd && e.contains(hd) ? getComputedStyle(hd) : st).fontSize) || 0),
+        art: !!e.closest("article,[role=article],[role=feed]"),
+        main: !!e.closest("main,[role=main]"),
+        // in the site's frame (header, nav, footer, sidebar), unless that frame belongs to an article
+        chrome: !!frame && !frame.closest("article,[role=article],main,[role=main]"),
+        ext: !!site && site != location.host,
+        img: Math.round((Math.min(1, Math.max(0, ...pics) / (innerWidth * innerHeight)) || 0) * 1000) / 1000,
+        like: it ? it.n : 0,
+        at: it ? it.at : -1,
+        prose: block ? text(block, 400).length : 0,
+        around: text(it?.el ?? block, 80),
       };
     });
     return { els, controls };
@@ -312,11 +354,24 @@ if (self.document) {
       const delay = setTimeout(() => spinner.classList.add("on"), 120); // appears only if the work takes more than a blink
       try {
         const { els, controls } = collect();
+        const paras = [...document.querySelectorAll("p")].slice(0, 400);
+        let query = location.search.slice(1).replace(/\+/g, " ");
+        try {
+          query = decodeURIComponent(query); // a search page's query, mostly
+        } catch {}
         const page = {
-          host: location.hostname,
           path: location.pathname,
           title: document.title,
           desc: document.querySelector("meta[name=description]")?.content ?? "",
+          // what the page says it is about, how much it reads, and the size of its running text
+          h1: text(document.querySelector("h1"), 80),
+          query: cut(query, 80),
+          prose: Math.round(Math.min(50, paras.reduce((n, p) => n + p.textContent.length, 0) / 1000) * 10) / 10,
+          base:
+            parseFloat(
+              getComputedStyle(paras.find((p) => text(p).length >= 60) ?? document.body ?? document.documentElement)
+                .fontSize,
+            ) || 16,
           scroll: Math.min(20, document.documentElement.scrollHeight / innerHeight),
         };
         const timeout = new Promise((_, fail) => setTimeout(() => fail(new Error("no answer within 5 s")), 5000));
@@ -353,20 +408,28 @@ if (self.document) {
     true,
   );
 } else {
-  // The ranker: two LightGBM models (ranker.json, made by train.py: a ranker and a pick-or-not classifier) score every control of the page from cheap features
-  // (position, kind, what is on screen, words in the label), no neural network. rank(model, controls, focus, page): controls as collect() returns them,
-  // focus the index of the focused control or -1. Returns one score per control (each model's scores standardised within the page, then added); null for the focused one.
+  // The ranker: two LightGBM models in ranker.json (made by train.py: a ranker and a "how much is it wanted" model) score every control
+  // of the page from cheap features (where it is, what it is, how it looks, what is on top, what reads as content, its words), no neural
+  // network. rank(model, controls, focus, page): controls as collect() returns them, focus the index of the focused control or -1.
+  // Returns one score per control (each model's scores standardised within the page, then added); null for the focused one.
+  // Every count is computed once per page, so thousands of controls stay cheap. The features are train.py's, by name.
+  const STOP = new Set(
+    `the and for with from that this your you our are was were has have had not but all any can will into about its his her
+    their they them there here than then also just been being more most very what when who how which where why per via off
+    el la los las de del en un una uno unos que por con para es se al lo su sus le les des du et au aux est dans qui sur pas
+    der die das und den dem des ein eine einer mit von zu im ist auf für nicht sie es wir ihr
+    של את על עם זה זו כל או גם לא הוא היא אם כי
+    и в во на с со по к ко из от для не что это как`.split(/\s+/),
+  );
+  // words in any script (two letters or more, vowel marks kept), without the commonest little words
+  const words = (s) => (s.toLowerCase().match(/\p{L}[\p{L}\p{M}]+/gu) ?? []).filter((w) => !STOP.has(w));
+  const hrefPath = (c) => c.href.split("#")[0].split("?")[0]; // where a link leads, without its query and fragment
   const length = (s) => [...s].length;
-  const words = (s) => new Set(s.toLowerCase().match(/[a-z]{3,}/g));
   const onScreen = (c) => c.w >= 4 && c.h >= 4 && c.y + c.h >= 0 && c.y <= 900 && c.x <= 1280;
   const isField = (c) =>
     /^(textarea|input (text|search|email|password|tel|url|number)|textbox|searchbox|combobox)$/.test(c.kind); // controls you type into
-  const guess = (c) =>
-    (/^(input|textarea|select)/.test(c.kind) ? 3 : c.kind.startsWith("button") ? 2 : 1) +
-    (c.box == "main") +
-    2 * onScreen(c) -
-    c.i / 100;
   const count = (items) => items.reduce((m, k) => m.set(k, (m.get(k) ?? 0) + 1), new Map());
+  const rankOf = (ordered) => new Map(ordered.map((c, r) => [c.i, r]));
   // a tree: go left when the feature is <= the threshold; a negative child ~n is leaf n
   const walk = ([feature, threshold, left, right, leaf], x) => {
     if (!feature.length) return leaf[0];
@@ -380,35 +443,40 @@ if (self.document) {
     return r.map((v) => (v - mean) / sd);
   };
 
-  // the same features, in the same order, as train.py; every count is computed once per page, so thousands of controls stay cheap
   const rank = (model, all, focus, page) => {
     const controls = all.filter((c) => c.i != focus),
       focused = all.find((c) => c.i == focus);
     const shown = controls.filter(onScreen),
       shownY = shown.map((c) => c.y).sort((a, b) => a - b),
-      shownRank = new Map(shown.map((c, r) => [c.i, r]));
-    const inputsShown = shown.filter((c) => c.kind.startsWith("input")).length;
+      shownRank = rankOf(shown),
+      inputsShown = shown.filter((c) => c.kind.startsWith("input")).length;
     // how much a control stands out by being a coloured, filled shape; 0 = the most colourful control on screen
     const colour = (c) => (c.fill >= 0.5 ? c.sat : 0);
-    const satRank = new Map([...shown].sort((a, b) => colour(b) - colour(a)).map((c, r) => [c.i, r]));
-    // how much of what is on screen is covered by something on top
-    const known = controls.filter((c) => c.hit >= 0),
-      occludedShare = known.length ? known.filter((c) => c.hit == 0).length / known.length : 0;
-    const layered = controls.filter((c) => c.layer >= 0),
-      layerSize = count(layered.map((c) => c.layer));
-    const layerKnown = count(known.filter((c) => c.layer >= 0).map((c) => c.layer)),
-      layerHits = count(known.filter((c) => c.layer >= 0 && c.hit == 1).map((c) => c.layer));
-    const regionSize = count(controls.filter((c) => c.region >= 0).map((c) => c.region)),
-      kindCount = count(controls.map((c) => c.kind)),
-      kindSeen = new Map();
-    const fields = all.filter((c) => isField(c) && c.form >= 0),
-      formFields = count(fields.map((c) => c.form)); // the typing fields that sit in a form
-    const firstField = new Map();
+    const satRank = rankOf([...shown].sort((a, b) => colour(b) - colour(a))),
+      fontRank = rankOf([...shown].sort((a, b) => b.font - a.font)), // 0 = the largest type on screen
+      headingRank = rankOf(controls.filter((c) => c.head)),
+      contentRank = rankOf(controls.filter((c) => (c.art || c.main) && !c.chrome));
+    const kindCount = count(controls.map((c) => c.kind)),
+      kindSeen = new Map(),
+      labelCount = count(controls.map((c) => c.label.trim().toLowerCase())),
+      hrefCount = count(controls.map(hrefPath));
+    const fields = all.filter((c) => isField(c) && c.form >= 0), // the typing fields that sit in a form
+      formFields = count(fields.map((c) => c.form)),
+      firstField = new Map();
     for (const c of fields) if (!firstField.has(c.form)) firstField.set(c.form, c.i);
     const inForm = (c, form) => form >= 0 && c.form == form;
     const focusForm = focused ? focused.form : -1,
       emptyLeft = fields.filter((c) => !c.filled && inForm(c, focusForm) && c.i != focus).length;
-    const same = (c, key) => !!focused && c[key] >= 0 && c[key] == focused[key]; // in the same layer or region as the focused control
+    // how much of what is on screen is covered by something on top, and by which layer
+    const known = controls.filter((c) => c.hit >= 0),
+      occludedShare = known.length ? known.filter((c) => c.hit == 0).length / known.length : 0;
+    const layerSize = count(controls.filter((c) => c.layer >= 0).map((c) => c.layer)),
+      layerKnown = count(known.filter((c) => c.layer >= 0).map((c) => c.layer)),
+      layerHits = count(known.filter((c) => c.layer >= 0 && c.hit == 1).map((c) => c.layer)),
+      regionSize = count(controls.filter((c) => c.region >= 0).map((c) => c.region));
+    const same = (c, key) => !!focused && c[key] >= 0 && c[key] == focused[key]; // in the focused control's layer or region
+    const titleWords = new Set(words(`${page.title} ${page.h1}`)),
+      queryWords = new Set(words(page.query));
     // how many on-screen controls are above y
     const above = (y) => {
       let lo = 0,
@@ -420,29 +488,22 @@ if (self.document) {
       }
       return lo;
     };
-    // one row, reused for every control: the features, then a 0/1 per word of the control, then per word of the page (those stay set)
+    // one row, reused for every control: the features, then a 0/1 per word of the control ("w:"), of the text around it ("c:")
+    // and of the page ("p:", those stay set)
     const nf = model.features.length,
       x = new Float64Array(nf + model.words.length),
       column = new Map(model.words.map((w, j) => [w, nf + j]));
     const columns = (prefix, text) =>
-      [...words(text)].map((w) => column.get(prefix + w)).filter((j) => j !== undefined);
-    for (const j of columns("p:", `${page.host} ${page.path} ${page.title} ${page.desc}`)) x[j] = 1;
+      [...new Set(words(text))].map((w) => column.get(prefix + w)).filter((j) => j !== undefined);
+    for (const j of columns("p:", `${page.path} ${page.title} ${page.desc} ${page.h1} ${page.query}`)) x[j] = 1;
     const raw = model.models.map(() => []);
     for (const c of controls) {
-      const sameRank = kindSeen.get(c.kind) ?? 0,
+      const label = new Set(words(c.label)),
+        segments = hrefPath(c).split("/").filter(Boolean),
         inFocusForm = inForm(c, focusForm);
-      kindSeen.set(c.kind, sameRank + 1);
+      const overlap = (set) => (label.size ? [...label].filter((w) => set.has(w)).length / label.size : 0);
       const f = {
-        same_kind_rank: sameRank,
-        same_kind_count: kindCount.get(c.kind),
-        inputs_on_screen: inputsShown,
-        screen_rank: shownRank.get(c.i) ?? -1,
-        on_screen_count: shown.length,
-        controls_above: above(c.y),
-        no_parent_text: c.parent == "",
-        before_len: length(c.before),
-        kind: model.kinds[c.kind] ?? -1,
-        box: model.boxes[c.box] ?? -1,
+        // where it is on the page and on screen
         x: c.x / 1280,
         y: c.y / 900,
         w: c.w / 1280,
@@ -450,27 +511,45 @@ if (self.document) {
         index: c.i,
         index_frac: c.i / Math.max(1, c.n),
         count: c.n,
+        screen_rank: shownRank.get(c.i) ?? -1,
+        on_screen_count: shown.length,
+        controls_above: above(c.y),
+        page_scroll: page.scroll,
+        // what it is
+        kind: model.kinds[c.kind] ?? -1,
+        box: model.boxes[c.box] ?? -1,
+        same_kind_rank: kindSeen.get(c.kind) ?? 0,
+        same_kind_count: kindCount.get(c.kind),
+        inputs_on_screen: inputsShown,
         label_len: length(c.label),
+        label_words: words(c.label).length,
+        no_parent_text: c.parent == "",
+        before_len: length(c.before),
+        // where it sits relative to the control you are in
         nothing_focused: focus < 0,
-        index_delta: focus >= 0 ? c.i - focus : 0,
-        guess: guess(c),
-        required: c.required,
-        is_submit: c.submit,
-        dismissive: /^(clear|reset|cancel|close|dismiss|decline|no thanks|skip|back)\b/.test(c.label.toLowerCase()),
-        first_field: isField(c) && c.form >= 0 && firstField.get(c.form) == c.i,
-        form_fields: c.form >= 0 ? (formFields.get(c.form) ?? 0) : 0,
-        focus_filled: !!focused?.filled,
-        in_focus_form: inFocusForm,
-        after_focus: inFocusForm && c.i > focus,
-        empty_fields_left: emptyLeft,
-        empty_field: isField(c) && !c.filled,
+        index_delta: focused ? c.i - focus : 0,
         focus_dx: focused ? (c.x - focused.x) / 1280 : 0,
         focus_dy: focused ? (c.y - focused.y) / 900 : 0,
         focus_dist: focused ? Math.hypot(c.x - focused.x, c.y - focused.y) / 1000 : 0,
+        focus_filled: !!focused?.filled,
+        focus_in_layer: !!focused && focused.layer >= 0,
+        same_layer: same(c, "layer"),
+        same_region: same(c, "region"),
+        // its form: the submit button, the first field, how much is still empty
+        required: c.required,
+        is_submit: c.submit,
         submit_like:
           /\b(send|submit|go|search|post|reply|comment|save|continue|next|sign in|log in|login|apply|ask)\b/.test(
             c.label.toLowerCase(),
           ),
+        dismissive: /^(clear|reset|cancel|close|dismiss|decline|no thanks|skip|back)\b/.test(c.label.toLowerCase()),
+        first_field: isField(c) && c.form >= 0 && firstField.get(c.form) == c.i,
+        form_fields: c.form >= 0 ? (formFields.get(c.form) ?? 0) : 0,
+        in_focus_form: inFocusForm,
+        after_focus: inFocusForm && c.i > focus,
+        empty_fields_left: emptyLeft,
+        empty_field: isField(c) && !c.filled,
+        // how it looks
         fill: c.fill,
         sat: c.sat,
         lum: c.lum,
@@ -479,6 +558,7 @@ if (self.document) {
         pointer: c.pointer,
         icon: c.icon,
         sat_rank: satRank.get(c.i) ?? -1,
+        // the stack of layers above the page: on top or covered, its own layer's size and place, what the site is presenting
         hit: c.hit,
         occluded_share: occludedShare,
         in_layer: c.layer >= 0,
@@ -489,19 +569,45 @@ if (self.document) {
         ledge: c.ledge,
         layer_size: c.layer >= 0 ? layerSize.get(c.layer) : 0,
         layer_hit_share: layerKnown.get(c.layer) ? (layerHits.get(c.layer) ?? 0) / layerKnown.get(c.layer) : 1,
-        same_layer: same(c, "layer"),
-        focus_in_layer: !!focused && focused.layer >= 0,
-        same_region: same(c, "region"),
+        foreground: c.layer >= 0 && c.hit == 1 ? occludedShare : 0,
         region_size: c.region >= 0 ? regionSize.get(c.region) : 0,
         in_dialog: c.dialog,
         bar: c.bar,
         fixed: c.fixed,
-        page_scroll: page.scroll ?? 1,
-        // in a layer of its own, on top, with the page behind it covered: what the site is presenting
-        foreground: c.layer >= 0 && c.hit == 1 ? occludedShare : 0,
+        // content or frame: a headline (heading level, which heading, type size next to the running text), in an article or main,
+        // in the site's frame, which of the content's controls it is
+        heading: c.head,
+        heading_rank: headingRank.get(c.i) ?? -1,
+        font: c.font / page.base,
+        font_rank: fontRank.get(c.i) ?? -1,
+        in_article: c.art,
+        in_main: c.main,
+        in_frame: c.chrome,
+        content_rank: contentRank.get(c.i) ?? -1,
+        // one of many alike (cards, results, rows; which one), with a picture, in running text, said or linked again
+        alike: c.like,
+        alike_index: c.at,
+        image: c.img,
+        prose: c.prose,
+        label_repeats: c.label.trim() ? labelCount.get(c.label.trim().toLowerCase()) - 1 : 0,
+        href_repeats: hrefPath(c) ? hrefCount.get(hrefPath(c)) - 1 : 0,
+        // where it leads: another site, a spot on this page, how deep, a slug of words or a number (an article, a product)
+        external: c.ext,
+        fragment: c.href.startsWith("#"),
+        href_depth: segments.length,
+        slug_words: segments.length ? segments.at(-1).split(/[-_]+/).filter(Boolean).length : 0,
+        href_number: /[0-9]{3,}/.test(hrefPath(c)),
+        // what it says next to what the page is about
+        title_overlap: overlap(titleWords),
+        query_overlap: overlap(queryWords),
+        page_prose: page.prose,
       };
+      kindSeen.set(c.kind, (kindSeen.get(c.kind) ?? 0) + 1);
       model.features.forEach((name, j) => (x[j] = Number(f[name])));
-      const set = columns("w:", `${c.label} ${c.href} ${c.name} ${c.ph} ${c.action}`);
+      const set = [
+        ...columns("w:", `${c.label} ${c.href} ${c.name} ${c.ph} ${c.action}`),
+        ...columns("c:", `${c.before} ${c.parent} ${c.around}`),
+      ];
       for (const j of set) x[j] = 1;
       model.models.forEach((trees, m) => raw[m].push(trees.reduce((sum, tree) => sum + walk(tree, x), 0)));
       for (const j of set) x[j] = 0;
